@@ -27,7 +27,7 @@ impl FromStr for S3Info {
             eyre::bail!("missing s3:// prefix");
         }
 
-        let mut parts = s.strip_prefix("s3://").unwrap().split("/");
+        let mut parts = s.strip_prefix("s3://").unwrap().split('/');
         let bucket = parts.next().ok_or_else(|| eyre::eyre!("missing bucket"))?;
         let key_parts: Vec<_> = parts.collect();
         let key = key_parts.join("/");
@@ -44,6 +44,7 @@ impl FromStr for S3Info {
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
+    color_eyre::install().unwrap();
 
     let args = Args::parse();
     let s3_info: S3Info = args.object.parse().wrap_err("invalid S3 url")?;
