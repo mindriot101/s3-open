@@ -1,5 +1,5 @@
 use eyre::{Report, WrapErr};
-use std::io::{Seek, Write};
+use std::io::{Read, Seek, Write};
 use std::str::FromStr;
 use tokio_stream::StreamExt;
 
@@ -73,11 +73,14 @@ async fn main() -> Result<()> {
     tracing::debug!(path = ?tf.path(), "created temporary file");
 
     let mut bytes_written = 0;
+    let mut hasher = md5::Context::new();
     while let Some(bytes) = res.body.try_next().await? {
+        hasher.consume(&bytes);
         bytes_written += tf.write(&bytes)?;
     }
+    let checksum_before = hasher.compute();
+    tracing::debug!(?checksum_before, "computed checksum");
 
-    tf.seek(std::io::SeekFrom::Start(0))?;
     tracing::debug!(%bytes_written, "file contents written");
 
     // open editor
@@ -90,6 +93,28 @@ async fn main() -> Result<()> {
     if !status.success() {
         eyre::bail!("editor exited unsuccessfully");
     }
+
+    tf.seek(std::io::SeekFrom::Start(0))?;
+    let mut new_contents = Vec::new();
+    tf.read_to_end(&mut new_contents)?;
+    let checksum_after = md5::compute(&new_contents);
+
+    tracing::debug!(?checksum_after, "computed new checksum");
+
+    if checksum_before == checksum_after {
+        tracing::debug!("file not changed");
+        return Ok(());
+    }
+
+    tracing::debug!("new file contents");
+    client
+        .put_object()
+        .bucket(&s3_info.bucket)
+        .key(&s3_info.key)
+        .body(new_contents.into())
+        .send()
+        .await
+        .wrap_err("putting file contents back to s3")?;
 
     Ok(())
 }

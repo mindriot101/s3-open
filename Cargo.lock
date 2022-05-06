@@ -1161,6 +1161,7 @@ dependencies = [
  "clap",
  "color-eyre",
  "eyre",
+ "md5",
  "tempfile",
  "tokio",
  "tokio-stream",
